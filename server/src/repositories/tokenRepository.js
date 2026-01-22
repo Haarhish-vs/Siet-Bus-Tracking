@@ -14,20 +14,22 @@ async function getRecipientsByBus(busNumber) {
     return [];
   }
 
-  return snapshot.docs.map((document) => {
-    const data = document.data();
-    const role = (data.role || '').toLowerCase();
-    if (!TARGET_ROLES.includes(role)) {
-      return null;
-    }
-    const tokens = Array.isArray(data.fcmTokens) ? data.fcmTokens.filter(Boolean) : [];
-    return {
-      uid: document.id,
-      role: role,
-      busNumber: data.busNumber,
-      tokens,
-    };
-  }).filter(Boolean);
+  return snapshot.docs
+    .map((document) => {
+      const data = document.data();
+      const role = (data.role || '').toLowerCase();
+      if (!TARGET_ROLES.includes(role)) {
+        return null;
+      }
+      const tokens = Array.isArray(data.fcmTokens) ? data.fcmTokens.filter(Boolean) : [];
+      return {
+        uid: document.id,
+        role,
+        busNumber: data.busNumber,
+        tokens,
+      };
+    })
+    .filter(Boolean);
 }
 
 async function getRecipientsByRole(role) {
@@ -36,10 +38,7 @@ async function getRecipientsByRole(role) {
   }
 
   const normalizedRole = role.toLowerCase();
-  const snapshot = await db
-    .collection(USERS_COLLECTION)
-    .where('role', '==', normalizedRole)
-    .get();
+  const snapshot = await db.collection(USERS_COLLECTION).where('role', '==', normalizedRole).get();
 
   if (snapshot.empty) {
     return [];
