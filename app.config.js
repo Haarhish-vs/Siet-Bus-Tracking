@@ -1,12 +1,8 @@
 require('dotenv').config();
 const { withAndroidManifest } = require('@expo/config-plugins');
 
-const GOOGLE_MAPS_API_KEY =
-	process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || process.env.GOOGLE_MAPS_API_KEY;
+const ANDROID_MAPS_API_KEY = process.env.EXPO_PUBLIC_ANDROID_MAPS_API_KEY || 'AIzaSyCPz7I0tCRtmXUn5FZRVXjdi03oc-ye1rw';
 
-if (!GOOGLE_MAPS_API_KEY) {
-	throw new Error('Missing Google Maps API key in env (EXPO_PUBLIC_GOOGLE_MAPS_API_KEY or GOOGLE_MAPS_API_KEY).');
-}
 
 const withSingleFcmColorMeta = (config) =>
 	withAndroidManifest(config, (config) => {
@@ -51,9 +47,6 @@ const baseExpoConfig = {
 	},
 	ios: {
 		supportsTablet: true,
-		config: {
-			googleMapsApiKey: GOOGLE_MAPS_API_KEY,
-		},
 		infoPlist: {
 			UIBackgroundModes: ['location'],
 			NSLocationWhenInUseUsageDescription:
@@ -75,11 +68,10 @@ const baseExpoConfig = {
 			backgroundColor: '#ffffff',
 		},
 		edgeToEdgeEnabled: true,
-		config: {
-			googleMaps: {
-				apiKey: GOOGLE_MAPS_API_KEY,
-			},
+		googleMaps: {
+			apiKey: ANDROID_MAPS_API_KEY,
 		},
+
 		permissions: [
 			'POST_NOTIFICATIONS',
 			'ACCESS_COARSE_LOCATION',
@@ -123,12 +115,18 @@ const baseExpoConfig = {
 		],
 		'expo-mail-composer',
 		'expo-font',
+		[
+			'react-native-maps',
+			{
+				mapsImplementation: 'google',
+				useGoogleMapsAppPreference: true,
+			},
+		],
 	],
 	extra: {
 		eas: {
 			projectId: '7ccd10d2-9d0a-439a-8816-260ef2b9d6b6',
 		},
-		googleMapsApiKey: GOOGLE_MAPS_API_KEY,
 	},
 	owner: 'haarhish23',
 };

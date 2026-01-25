@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -8,31 +8,44 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import MapView, { Marker, AnimatedRegion, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
+import MapView, { Polyline, Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { COLORS, SAMPLE_STOPS } from '../utils/constants';
 import { Ionicons } from '@expo/vector-icons';
 import { subscribeToBusLocation } from '../services/locationService';
 
+const toLngLat = (point = {}) => ({ latitude: Number(point.latitude) || 0, longitude: Number(point.longitude) || 0 });
+const SIET_CENTER = { latitude: 11.0168, longitude: 76.9558 };
+
+const computeBounds = (points = []) => {
+  if (!points.length) {
+    return null;
+  }
+  const lats = points.map((pt) => pt.latitude);
+  const lngs = points.map((pt) => pt.longitude);
+  return {
+    northEast: [Math.max(...lngs), Math.max(...lats)],
+    southWest: [Math.min(...lngs), Math.min(...lats)],
+  };
+};
+
 const BusLiveTrackingScreen = ({ route, navigation }) => {
   const { bus } = route.params; // Get bus details from navigation params
   const [busLocation, setBusLocation] = useState(null);
   const [loading, setLoading] = useState(true);
-  const mapRef = useRef(null);
+  const cameraRef = useRef(null);
   const rawBusLabel = bus?.displayName || bus?.name || bus?.busName || bus?.number || 'Bus';
   const busDisplayName = typeof rawBusLabel === 'string'
     ? rawBusLabel.replace(/-+/g, '-').trim() || 'Bus'
     : 'Bus';
-  const busCoordinate = useRef(
-    new AnimatedRegion({
-      latitude: 11.0148359,
-      longitude: 77.0642338,
-      latitudeDelta: 0.001,
-      longitudeDelta: 0.001,
-    })
-  ).current;
-  
-  const markerRef = useRef(null);
+  const sampleRouteShape = useMemo(() => ({
+    type: 'Feature',
+    geometry: {
+      type: 'LineString',
+      coordinates: SAMPLE_STOPS.map((stop) => [stop.longitude, stop.latitude]),
+    },
+    properties: {},
+  }), []);
 
   // 🔥 Subscribe to real-time bus location updates from Firestore
   useEffect(() => {
@@ -82,25 +95,8 @@ const BusLiveTrackingScreen = ({ route, navigation }) => {
           
           setBusLocation(newLocation);
           
-          // Smooth animation for marker
-          busCoordinate.timing({
-            latitude: newLocation.latitude,
-            longitude: newLocation.longitude,
-            duration: 1000,
-            useNativeDriver: false,
-          }).start();
-          
-          // Auto-follow camera with rotation when tracking
-          if (isTrackingActive && mapRef.current) {
-            mapRef.current.animateCamera({
-              center: {
-                latitude: newLocation.latitude,
-                longitude: newLocation.longitude,
-              },
-              heading: newLocation.heading,
-              pitch: 0,
-              zoom: 17,
-            }, { duration: 1000 });
+          if (isTrackingActive) {
+            animateToCoordinate(newLocation);
           }
           
           console.log('✅ [ADMIN] Bus location state updated successfully');
@@ -141,29 +137,42 @@ const BusLiveTrackingScreen = ({ route, navigation }) => {
         unsubscribe();
       }
     };
-  }, [bus.number]);
+  }, [bus.number, animateToCoordinate]);
+
+  const animateToCoordinate = useCallback((coordinate) => {
+    if (!cameraRef.current || !coordinate) {
+      return;
+    }
+    cameraRef.current.setCamera({
+      centerCoordinate: toLngLat(coordinate),
+      zoomLevel: 16,
+      animationDuration: 1000,
+      heading: coordinate.heading || 0,
+    });
+  }, []);
+
+  const fitPoints = useCallback((points = []) => {
+    if (!cameraRef.current || !points.length) {
+      return;
+    }
+    const bounds = computeBounds(points);
+    if (!bounds) {
+      return;
+    }
+    cameraRef.current.fitBounds(bounds.northEast, bounds.southWest, 64, 1000);
+  }, []);
 
   const centerMapOnBus = () => {
-    if (busLocation && mapRef.current) {
-      mapRef.current.animateToRegion({
-        latitude: busLocation.latitude,
-        longitude: busLocation.longitude,
-        latitudeDelta: 0.01,
-        longitudeDelta: 0.01,
-      }, 1000);
+    if (busLocation) {
+      animateToCoordinate(busLocation);
     } else {
       Alert.alert('No Location', 'Bus location is not available');
     }
   };
 
   const showFullRoute = () => {
-    if (mapRef.current && busLocation) {
-      const locations = [busLocation, ...SAMPLE_STOPS];
-      mapRef.current.fitToCoordinates(locations, {
-        edgePadding: { top: 80, right: 80, bottom: 80, left: 80 },
-        animated: true,
-      });
-    }
+    const locations = busLocation ? [busLocation, ...SAMPLE_STOPS] : SAMPLE_STOPS;
+    fitPoints(locations);
   };
 
   if (loading) {
@@ -198,34 +207,53 @@ const BusLiveTrackingScreen = ({ route, navigation }) => {
       </View>
 
       <MapView
-        ref={mapRef}
+        provider={PROVIDER_GOOGLE}
         style={styles.map}
         initialRegion={{
-          latitude: busLocation?.latitude || SAMPLE_STOPS[0].latitude,
-          longitude: busLocation?.longitude || SAMPLE_STOPS[0].longitude,
-          latitudeDelta: 0.05,
-          longitudeDelta: 0.05,
+          latitude: busLocation?.latitude || SIET_CENTER.latitude,
+          longitude: busLocation?.longitude || SIET_CENTER.longitude,
+          latitudeDelta: 0.0922,
+          longitudeDelta: 0.0421,
         }}
-        provider={PROVIDER_GOOGLE}
-        showsUserLocation={false}
-        showsMyLocationButton={false}
-        rotateEnabled={true}
+        ref={cameraRef}
+        showsUserLocation
+        showsMyLocationButton
+        zoomEnabled
+        scrollEnabled
         pitchEnabled={false}
-        mapType="standard"
-        zoomTapEnabled
-        zoomControlEnabled
-        moveOnMarkerPress={false}
-        loadingEnabled
+        rotateEnabled
       >
-        {/* Bus Location Marker - Animated & Only show when actively tracking */}
+        {/* Route Polyline */}
+        <Polyline
+          coordinates={sampleRouteShape.geometry.coordinates.map(([lng, lat]) => ({
+            latitude: lat,
+            longitude: lng,
+          }))}
+          strokeColor={COLORS.accent}
+          strokeWidth={3}
+          lineDashpattern={[1, 1]}
+          geodesic
+        />
+
+        {/* Sample Stops */}
+        {SAMPLE_STOPS.map((stop, index) => (
+          <Marker
+            key={`stop-${index}`}
+            coordinate={{ latitude: stop.latitude, longitude: stop.longitude }}
+            title={`Stop ${index + 1}`}
+          >
+            <View style={styles.stopMarker}>
+              <View style={styles.stopInnerDot} />
+            </View>
+          </Marker>
+        ))}
+
+        {/* Bus Location */}
         {busLocation && busLocation.isTracking && (
-          <Marker.Animated
-            ref={markerRef}
-            coordinate={busCoordinate}
-            anchor={{ x: 0.5, y: 0.5 }}
-            flat
-            rotation={busLocation.heading || 0}
-            tracksViewChanges={false}
+          <Marker
+            coordinate={toLngLat(busLocation)}
+            title={busDisplayName}
+            description="Current Bus Location"
           >
             <View style={styles.busMarkerGroup}>
               <View style={styles.busMarkerCircle}>
@@ -235,30 +263,8 @@ const BusLiveTrackingScreen = ({ route, navigation }) => {
                 <Text style={styles.busMarkerLabelText}>{busDisplayName}</Text>
               </View>
             </View>
-          </Marker.Animated>
-        )}
-
-        {/* Bus Stop Markers */}
-        {SAMPLE_STOPS.map((stop, index) => (
-          <Marker
-            key={index}
-            coordinate={stop}
-            tracksViewChanges={false}
-            anchor={{ x: 0.5, y: 0.5 }}
-          >
-            <View style={styles.stopMarker}>
-              <View style={styles.stopInnerDot} />
-            </View>
           </Marker>
-        ))}
-
-        {/* Route Line */}
-        <Polyline
-          coordinates={SAMPLE_STOPS}
-          strokeColor={COLORS.accent}
-          strokeWidth={3}
-          lineDashPattern={[5, 5]}
-        />
+        )}
       </MapView>
 
       {/* Minimal Status Card - Only show when tracking */}

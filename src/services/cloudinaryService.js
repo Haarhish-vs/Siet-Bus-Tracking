@@ -22,6 +22,11 @@ const DEFAULT_FOLDER = CLOUDINARY_BASE_FOLDER;
 
 const ensureConfig = () => {
   if (!CLOUDINARY_CLOUD_NAME || !CLOUDINARY_API_KEY || !CLOUDINARY_API_SECRET) {
+    console.error('[Cloudinary] Missing configuration', {
+      hasCloudName: Boolean(CLOUDINARY_CLOUD_NAME),
+      hasApiKey: Boolean(CLOUDINARY_API_KEY),
+      hasApiSecret: Boolean(CLOUDINARY_API_SECRET),
+    });
     throw new Error('Cloudinary environment variables are not configured.');
   }
 };
@@ -70,12 +75,20 @@ export const uploadImageToCloudinary = async (uri, options = {}) => {
     throw new Error('No image selected');
   }
 
+  console.info('[Cloudinary] Image selected', { uri });
   ensureConfig();
 
   const baseFolder = options.folder || DEFAULT_FOLDER;
-  const folder = baseFolder ? baseFolder.replace(/\/+$/u, '') : undefined;
+  const folder = baseFolder ? baseFolder.replace(/\/+/u, '') : undefined;
   const publicId = sanitizePublicId(options.publicId);
   const timestamp = Math.floor(Date.now() / 1000);
+
+  console.info('[Cloudinary] Preparing upload', {
+    uploadUrl: `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`,
+    cloudName: CLOUDINARY_CLOUD_NAME,
+    folder,
+    publicId,
+  });
 
   const signatureParams = {
     timestamp,
@@ -117,17 +130,38 @@ export const uploadImageToCloudinary = async (uri, options = {}) => {
     formData.append('public_id', publicId);
   }
 
-  const response = await fetch(uploadUrl, {
-    method: 'POST',
-    body: formData,
-  });
+  console.info('[Cloudinary] Sending upload request');
+
+  let response;
+  try {
+    response = await fetch(uploadUrl, {
+      method: 'POST',
+      body: formData,
+    });
+  } catch (networkError) {
+    console.error('[Cloudinary] Network error while uploading', networkError);
+    throw new Error('Unable to reach Cloudinary. Check network/HTTPS configuration.');
+  }
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(`Cloudinary upload failed: ${errorText}`);
+    console.error('[Cloudinary] Upload failed', {
+      status: response.status,
+      body: errorText,
+    });
+    throw new Error(`Cloudinary upload failed (${response.status}): ${errorText}`);
   }
 
   const payload = await response.json();
+  console.info('[Cloudinary] Upload success payload received', {
+    hasSecureUrl: Boolean(payload?.secure_url),
+    publicId: payload?.public_id,
+  });
+
+  if (!payload?.secure_url) {
+    console.error('[Cloudinary] Missing secure_url in response', payload);
+    throw new Error('Cloudinary response missing secure_url. Check preset / upload signature.');
+  }
 
   return {
     secureUrl: payload.secure_url,

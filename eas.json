@@ -16,7 +16,6 @@
     },
     "production": {
       "env": {
-        "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "AIzaSyAIWmje7La9fVx_LY_a74R2hmUIuO-bhF8",
         "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyBvLkPIhYEpOqXOaN1Ou-2wvSBodu7YXn4",
         "EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME": "dg35x6vyp",
         "EXPO_PUBLIC_CLOUDINARY_API_KEY": "224194557274458",

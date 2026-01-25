@@ -109,19 +109,22 @@ function registerTokenRefreshListener(user) {
 }
 
 export async function registerPushTokenAsync(user) {
+  if (!user) {
+    console.warn('[FCM] registerPushTokenAsync skipped: user context missing');
+    return null;
+  }
+
+  const identifier = resolveUserIdentifier(user);
+  if (!identifier) {
+    console.warn('[FCM] Unable to persist token: missing user identifier', user);
+    return null;
+  }
+
   try {
-    if (!user) {
-      console.warn('registerPushTokenAsync called without user context');
-      return null;
-    }
-
-    const identifier = resolveUserIdentifier(user);
-    if (!identifier) {
-      console.warn('Unable to persist FCM token: missing user identifier', user);
-      return null;
-    }
-
+    console.info('[FCM] Requesting notification permission for', identifier);
     const permissionGranted = await ensureMessagingPermission();
+    console.info('[FCM] Permission result', { identifier, permissionGranted });
+
     if (!permissionGranted) {
       Alert.alert(
         'Notifications Disabled',
@@ -132,19 +135,33 @@ export async function registerPushTokenAsync(user) {
 
     await messaging().setAutoInitEnabled(true);
     const deviceToken = await messaging().getToken();
+    console.info('[FCM] messaging().getToken() result', {
+      identifier,
+      hasToken: Boolean(deviceToken),
+    });
 
     if (!deviceToken) {
-      console.warn('Firebase returned empty FCM token for user', identifier);
+      console.warn('[FCM] Empty token received; aborting save', identifier);
       return null;
     }
 
-    await persistTokenForUser({ identifier, token: deviceToken, user });
-    registerTokenRefreshListener(user);
+    console.info('[FCM] Persisting token to Firestore', {
+      identifier,
+      tokenPreview: `${deviceToken.slice(0, 10)}…`,
+    });
 
-    console.info('Registered FCM token for user', identifier);
+    try {
+      await persistTokenForUser({ identifier, token: deviceToken, user });
+      console.info('[FCM] Token persisted successfully', identifier);
+    } catch (persistError) {
+      console.error('[FCM] Failed to persist token', { identifier, persistError });
+      return null;
+    }
+
+    registerTokenRefreshListener(user);
     return deviceToken;
   } catch (error) {
-    console.error('Failed to register FCM token:', error);
+    console.error('[FCM] registerPushTokenAsync failed', { identifier, error });
     return null;
   }
 }

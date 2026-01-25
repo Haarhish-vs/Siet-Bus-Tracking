@@ -12,7 +12,7 @@ import {
 	View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
+import MapView, { Polyline, Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -26,6 +26,23 @@ import {
 } from '../utils/routePolylineConfig';
 
 const EDGE_PADDING = { top: 72, right: 48, bottom: 120, left: 48 };
+const DEFAULT_ZOOM_LEVEL = 12;
+const SIET_CENTER = { latitude: 11.0168, longitude: 76.9558 };
+const MIN_PAN_PADDING = 48;
+
+const toLngLat = (point = {}) => ({ latitude: Number(point.latitude) || 0, longitude: Number(point.longitude) || 0 });
+
+const computeBounds = (points = []) => {
+	if (!points.length) {
+		return null;
+	}
+
+	const lats = points.map((pt) => pt.latitude);
+	const lngs = points.map((pt) => pt.longitude);
+	const northEast = [Math.max(...lngs), Math.max(...lats)];
+	const southWest = [Math.min(...lngs), Math.min(...lats)];
+	return { northEast, southWest };
+};
 
 const normaliseRouteStops = (rawStops) => {
 	if (!Array.isArray(rawStops)) {
@@ -88,7 +105,11 @@ const haversineDistance = (pointA = {}, pointB = {}) => {
 };
 
 export const BusMarker = ({ coordinate, label }) => (
-	<Marker coordinate={coordinate} tracksViewChanges={false} anchor={{ x: 0.5, y: 0.5 }}>
+	<Marker
+		coordinate={coordinate}
+		title={label}
+		description="Bus Location"
+	>
 		<View style={styles.busMarkerGroup}>
 			<View style={styles.busMarkerCircle}>
 				<Text style={styles.busMarkerEmoji}>🚌</Text>
@@ -101,7 +122,7 @@ export const BusMarker = ({ coordinate, label }) => (
 );
 
 const MapScreen = ({ route, navigation }) => {
-	const mapRef = useRef(null);
+	const cameraRef = useRef(null);
 
 	const [mapReady, setMapReady] = useState(false);
 	const [routeStops, setRouteStops] = useState(DEFAULT_ROUTE_STOPS);
@@ -149,6 +170,50 @@ const MapScreen = ({ route, navigation }) => {
 	}, [routeStops]);
 
 	const routeOnlyCoordinates = useMemo(() => stopsToLatLng(routeStops), [routeStops]);
+	const routePolylineShape = useMemo(
+		() => ({
+			type: 'Feature',
+			geometry: {
+				type: 'LineString',
+				coordinates: osrmPolyline.map((point) => [point.longitude, point.latitude]),
+			},
+			properties: {},
+		}),
+		[osrmPolyline]
+	);
+	const hasRouteShape = routePolylineShape.geometry.coordinates.length > 1;
+
+	const fitPointsWithCamera = useCallback(
+		(points) => {
+			if (!cameraRef.current || !points.length) {
+				return;
+			}
+			const bounds = computeBounds(points);
+			if (!bounds) {
+				return;
+			}
+			const padding = Math.max(
+				EDGE_PADDING.top,
+				EDGE_PADDING.right,
+				EDGE_PADDING.bottom,
+				EDGE_PADDING.left,
+				MIN_PAN_PADDING
+			);
+			cameraRef.current.fitBounds(bounds.northEast, bounds.southWest, padding, 600);
+		},
+		[cameraRef]
+	);
+
+	const animateToCoordinate = useCallback((coordinate) => {
+		if (!cameraRef.current || !coordinate) {
+			return;
+		}
+		cameraRef.current.setCamera({
+			centerCoordinate: toLngLat(coordinate),
+			zoomLevel: 16,
+			animationDuration: 600,
+		});
+	}, []);
 
 	const allMapPoints = useMemo(() => {
 		const points = [...routeOnlyCoordinates];
@@ -498,42 +563,26 @@ const MapScreen = ({ route, navigation }) => {
 	}, [route, ensureStudentLocation]);
 
 	const fitRoute = useCallback(() => {
-		if (!mapRef.current || routeOnlyCoordinates.length === 0) {
-			return;
-		}
-
-		mapRef.current.fitToCoordinates(routeOnlyCoordinates, {
-			edgePadding: EDGE_PADDING,
-			animated: true,
-		});
-	}, [routeOnlyCoordinates]);
+		fitPointsWithCamera(routeOnlyCoordinates);
+	}, [routeOnlyCoordinates, fitPointsWithCamera]);
 
 	const focusOnBus = useCallback(() => {
-		if (!mapRef.current || !busLocation || !isBusTracking) {
+		if (!busLocation || !isBusTracking) {
 			return;
 		}
-
-		mapRef.current.animateCamera({ center: busLocation, zoom: 16 }, { duration: 600 });
-	}, [busLocation, isBusTracking]);
+		animateToCoordinate(busLocation);
+	}, [busLocation, isBusTracking, animateToCoordinate]);
 
 	const focusOnStudent = useCallback(() => {
-		if (!mapRef.current || !studentLocation) {
+		if (!studentLocation) {
 			return;
 		}
-
-		mapRef.current.animateCamera({ center: studentLocation, zoom: 16 }, { duration: 600 });
-	}, [studentLocation]);
+		animateToCoordinate(studentLocation);
+	}, [studentLocation, animateToCoordinate]);
 
 	const fitEverything = useCallback(() => {
-		if (!mapRef.current || allMapPoints.length === 0) {
-			return;
-		}
-
-		mapRef.current.fitToCoordinates(allMapPoints, {
-			edgePadding: EDGE_PADDING,
-			animated: true,
-		});
-	}, [allMapPoints]);
+		fitPointsWithCamera(allMapPoints);
+	}, [allMapPoints, fitPointsWithCamera]);
 
 	useEffect(() => {
 		if (mapReady) {
@@ -566,46 +615,63 @@ const MapScreen = ({ route, navigation }) => {
 
 			<View style={styles.mapContainer}>
 				<MapView
-					ref={mapRef}
-					style={styles.map}
 					provider={PROVIDER_GOOGLE}
-					initialRegion={initialRegion}
+					style={styles.map}
+					initialRegion={{
+						latitude: initialRegion.latitude,
+						longitude: initialRegion.longitude,
+						latitudeDelta: 0.0922,
+						longitudeDelta: 0.0421,
+					}}
+					ref={cameraRef}
 					onMapReady={() => setMapReady(true)}
-					showsCompass
-					showsBuildings
-					showsPointsOfInterest={false}
-					mapType="standard"
-					loadingEnabled
-					moveOnMarkerPress={false}
-					zoomControlEnabled
+					showsUserLocation
+					showsMyLocationButton
+					zoomEnabled
+					scrollEnabled
+					pitchEnabled={false}
+					rotateEnabled
 				>
-					{osrmPolyline.length > 1 && (
+					{/* Route Polyline */}
+					{osrmPolyline.length > 0 && (
 						<Polyline
 							coordinates={osrmPolyline}
 							strokeColor={COLORS.success || '#22C55E'}
-							strokeWidth={6}
+							strokeWidth={5}
+							geodesic
 						/>
 					)}
 
+					{/* Route Stops */}
 					{routeStops.map((stop) => (
 						<Marker
 							key={stop.id || stop.name}
 							coordinate={{ latitude: stop.latitude, longitude: stop.longitude }}
 							title={stop.name}
-							description="Scheduled stop"
-							pinColor="red"
-						/>
+							description={`Stop ${routeStops.indexOf(stop) + 1}`}
+						>
+							<View style={styles.stopMarker}>
+								<View style={styles.stopInnerDot} />
+							</View>
+						</Marker>
 					))}
 
-					{isBusTracking && busLocation && <BusMarker coordinate={busLocation} label={busMarkerLabel} />}
+					{/* Bus Location */}
+					{isBusTracking && busLocation && (
+						<BusMarker coordinate={busLocation} label={busMarkerLabel} />
+					)}
 
+					{/* Student Location */}
 					{studentLocation && (
 						<Marker
 							coordinate={studentLocation}
-							title={role === 'student' ? 'You' : 'Student'}
-							description="Student location"
-							pinColor={COLORS.secondary || '#2563EB'}
-						/>
+							title="Your Location"
+							description="Current position"
+						>
+							<View style={[styles.stopMarker, styles.studentMarker]}>
+								<View style={styles.stopInnerDot} />
+							</View>
+						</Marker>
 					)}
 				</MapView>
 
@@ -779,6 +845,30 @@ const styles = StyleSheet.create({
 	},
 	map: {
 		...StyleSheet.absoluteFillObject,
+	},
+	stopMarker: {
+		width: 18,
+		height: 18,
+		borderRadius: 9,
+		backgroundColor: '#FFFFFF',
+		borderWidth: 3,
+		borderColor: '#F87171',
+		alignItems: 'center',
+		justifyContent: 'center',
+		shadowColor: '#000',
+		shadowOffset: { width: 0, height: 1 },
+		shadowOpacity: 0.2,
+		shadowRadius: 2,
+		elevation: 2,
+	},
+	stopInnerDot: {
+		width: 6,
+		height: 6,
+		borderRadius: 3,
+		backgroundColor: '#B91C1C',
+	},
+	studentMarker: {
+		borderColor: COLORS.secondary || '#2563EB',
 	},
 	busMarkerGroup: {
 		alignItems: 'center',
