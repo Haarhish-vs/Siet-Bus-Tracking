@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { StatusBar } from 'expo-status-bar';
 import { View, ActivityIndicator, Alert } from 'react-native';
@@ -11,6 +11,7 @@ import {
   Poppins_600SemiBold,
   Poppins_700Bold,
 } from '@expo-google-fonts/poppins';
+import * as SplashScreen from 'expo-splash-screen';
 import AppNavigator from './src/navigation/AppNavigator';
 import {
   getInitialNotification,
@@ -22,8 +23,11 @@ import { useFcmTokenManager } from './src/hooks/useFcmTokenManager';
 const BUS_UPDATE_FALLBACK_TITLE = 'SIET Bus Update';
 const BUS_UPDATE_FALLBACK_BODY = 'A new bus notification is available.';
 
+SplashScreen.preventAutoHideAsync().catch(() => null);
+
 export default function App() {
-  let [fontsLoaded] = useFonts({
+  const [appIsReady, setAppIsReady] = useState(false);
+  const [fontsLoaded] = useFonts({
     Poppins_300Light,
     Poppins_400Regular,
     Poppins_500Medium,
@@ -31,36 +35,67 @@ export default function App() {
     Poppins_700Bold,
   });
 
+  const foregroundSubscriptionRef = useRef(null);
+  const notificationOpenSubscriptionRef = useRef(null);
+
   useFcmTokenManager();
 
   useEffect(() => {
-    const foregroundUnsubscribe = subscribeToForegroundNotifications((remoteMessage) => {
-      const title = remoteMessage?.notification?.title || BUS_UPDATE_FALLBACK_TITLE;
-      const body = remoteMessage?.notification?.body || BUS_UPDATE_FALLBACK_BODY;
-      Alert.alert(title, body);
-    });
+    if (!fontsLoaded) {
+      return undefined;
+    }
 
-    const openedUnsubscribe = subscribeToNotificationOpens((remoteMessage) => {
-      if (remoteMessage?.data) {
-        console.log('Notification opened from background:', remoteMessage.data);
-      }
-    });
+    let isMounted = true;
 
-    getInitialNotification().then((remoteMessage) => {
-      if (remoteMessage?.data) {
-        console.log('App launched via notification:', remoteMessage.data);
+    const initializeApp = async () => {
+      try {
+        foregroundSubscriptionRef.current = subscribeToForegroundNotifications((remoteMessage) => {
+          const title = remoteMessage?.notification?.title || BUS_UPDATE_FALLBACK_TITLE;
+          const body = remoteMessage?.notification?.body || BUS_UPDATE_FALLBACK_BODY;
+          Alert.alert(title, body);
+        });
+
+        notificationOpenSubscriptionRef.current = subscribeToNotificationOpens((remoteMessage) => {
+          if (__DEV__ && remoteMessage?.data) {
+            console.log('Notification opened:', remoteMessage.data);
+          }
+        });
+
+        await getInitialNotification();
+
+        if (isMounted) {
+          setAppIsReady(true);
+        }
+      } catch (error) {
+        console.warn('Startup warning:', error);
+        if (isMounted) {
+          setAppIsReady(true);
+        }
+      } finally {
+        if (isMounted) {
+          try {
+            await SplashScreen.hideAsync();
+          } catch (splashError) {
+            console.warn('Splash screen hide failed', splashError);
+          }
+        }
       }
-    });
+    };
+
+    initializeApp();
 
     return () => {
-      foregroundUnsubscribe?.();
-      openedUnsubscribe?.();
+      isMounted = false;
+      foregroundSubscriptionRef.current?.();
+      notificationOpenSubscriptionRef.current?.();
+      foregroundSubscriptionRef.current = null;
+      notificationOpenSubscriptionRef.current = null;
     };
-  }, []);
+  }, [fontsLoaded]);
 
-  if (!fontsLoaded) {
+  if (!fontsLoaded || !appIsReady) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' }}>
         <ActivityIndicator size="large" color="#2E7D32" />
       </View>
     );

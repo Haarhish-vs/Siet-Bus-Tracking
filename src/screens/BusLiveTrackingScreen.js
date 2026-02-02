@@ -143,23 +143,25 @@ const BusLiveTrackingScreen = ({ route, navigation }) => {
     if (!cameraRef.current || !coordinate) {
       return;
     }
-    cameraRef.current.setCamera({
-      centerCoordinate: toLngLat(coordinate),
-      zoomLevel: 16,
-      animationDuration: 1000,
-      heading: coordinate.heading || 0,
-    });
+    const center = toLngLat(coordinate);
+    cameraRef.current.animateCamera(
+      {
+        center,
+        zoom: 16,
+        heading: coordinate.heading || 0,
+      },
+      { duration: 1000 }
+    );
   }, []);
 
   const fitPoints = useCallback((points = []) => {
     if (!cameraRef.current || !points.length) {
       return;
     }
-    const bounds = computeBounds(points);
-    if (!bounds) {
-      return;
-    }
-    cameraRef.current.fitBounds(bounds.northEast, bounds.southWest, 64, 1000);
+    cameraRef.current.fitToCoordinates(points, {
+      edgePadding: { top: 64, right: 64, bottom: 64, left: 64 },
+      animated: true,
+    });
   }, []);
 
   const centerMapOnBus = () => {

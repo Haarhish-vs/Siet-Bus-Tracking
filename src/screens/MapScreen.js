@@ -188,18 +188,18 @@ const MapScreen = ({ route, navigation }) => {
 			if (!cameraRef.current || !points.length) {
 				return;
 			}
-			const bounds = computeBounds(points);
-			if (!bounds) {
-				return;
-			}
-			const padding = Math.max(
-				EDGE_PADDING.top,
-				EDGE_PADDING.right,
-				EDGE_PADDING.bottom,
-				EDGE_PADDING.left,
-				MIN_PAN_PADDING
-			);
-			cameraRef.current.fitBounds(bounds.northEast, bounds.southWest, padding, 600);
+
+			const edgePadding = {
+				top: EDGE_PADDING.top,
+				right: EDGE_PADDING.right,
+				bottom: EDGE_PADDING.bottom,
+				left: EDGE_PADDING.left,
+			};
+
+			cameraRef.current.fitToCoordinates(points, {
+				edgePadding,
+				animated: true,
+			});
 		},
 		[cameraRef]
 	);
@@ -208,11 +208,15 @@ const MapScreen = ({ route, navigation }) => {
 		if (!cameraRef.current || !coordinate) {
 			return;
 		}
-		cameraRef.current.setCamera({
-			centerCoordinate: toLngLat(coordinate),
-			zoomLevel: 16,
-			animationDuration: 600,
-		});
+		const center = toLngLat(coordinate);
+		cameraRef.current.animateCamera(
+			{
+				center,
+				zoom: 16,
+				heading: coordinate.heading || 0,
+			},
+			{ duration: 600 }
+		);
 	}, []);
 
 	const allMapPoints = useMemo(() => {
