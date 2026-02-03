@@ -2,8 +2,13 @@ import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 
+import Constants from 'expo-constants';
+
+const extra = Constants.expoConfig?.extra || {};
+const firebaseExtra = extra.firebase || {};
+
 const firebaseConfig = {
-  apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
+  apiKey: firebaseExtra.apiKey,
   authDomain: 'iet-bus-tracking.firebaseapp.com',
   databaseURL: 'https://iet-bus-tracking-default-rtdb.firebaseio.com',
   projectId: 'iet-bus-tracking',

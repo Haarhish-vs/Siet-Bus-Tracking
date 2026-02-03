@@ -3,8 +3,12 @@ import { AppState } from 'react-native';
 import { authService } from '../services/authService';
 import { cleanupNotificationListeners, registerPushTokenAsync } from '../services/pushNotificationService';
 
-export const useFcmTokenManager = () => {
+export const useFcmTokenManager = (enabled = true) => {
   useEffect(() => {
+    if (!enabled) {
+      return undefined;
+    }
+
     let isMounted = true;
 
     const syncToken = async () => {
@@ -32,5 +36,5 @@ export const useFcmTokenManager = () => {
       subscription.remove?.();
       cleanupNotificationListeners();
     };
-  }, []);
+  }, [enabled]);
 };

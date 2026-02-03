@@ -37,7 +37,9 @@ const inferExpoHostUrl = () => {
 };
 
 const buildCandidateBaseUrls = () => {
-  const envUrl = sanitizeBaseUrl(process.env.EXPO_PUBLIC_NOTIFICATION_SERVER_URL);
+  const extra = Constants.expoConfig?.extra || {};
+  const backendExtra = extra.backend || {};
+  const envUrl = sanitizeBaseUrl(backendExtra.baseUrl || process.env.EXPO_PUBLIC_NOTIFICATION_SERVER_URL);
   const expoHostUrl = sanitizeBaseUrl(inferExpoHostUrl());
   const platformDefault = Platform.OS === 'android' ? DEFAULT_ANDROID : DEFAULT_IOS;
 

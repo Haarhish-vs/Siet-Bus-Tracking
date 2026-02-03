@@ -38,7 +38,8 @@ export default function App() {
   const foregroundSubscriptionRef = useRef(null);
   const notificationOpenSubscriptionRef = useRef(null);
 
-  useFcmTokenManager();
+  const fcmReady = appIsReady && fontsLoaded;
+  useFcmTokenManager(fcmReady);
 
   useEffect(() => {
     if (!fontsLoaded) {

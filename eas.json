@@ -10,6 +10,15 @@
     },
     "preview": {
       "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyBvLkPIhYEpOqXOaN1Ou-2wvSBodu7YXn4",
+        "EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME": "dg35x6vyp",
+        "EXPO_PUBLIC_CLOUDINARY_API_KEY": "224194557274458",
+        "EXPO_PUBLIC_CLOUDINARY_API_SECRET": "h0qZPE5u-B9V-8NdKrSz7yNZvz8",
+        "EXPO_PUBLIC_CLOUDINARY_UPLOAD_FOLDER": "siet-bus/profiles",
+        "CLOUDINARY_UPLOAD_FOLDER": "siet-bus/profiles",
+        "EXPO_PUBLIC_NOTIFICATION_SERVER_URL": "https://siet-bus-tracking.onrender.com"
+      },
       "android": {
         "buildType": "apk"
       }

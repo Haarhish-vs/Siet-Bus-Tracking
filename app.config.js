@@ -73,6 +73,8 @@ const baseExpoConfig = {
     resizeMode: 'contain',
     backgroundColor: '#ffffff',
   },
+  // Ensure this stays in sync with google-services.json (Android) and Firebase project settings
+  // Changing android.package requires downloading a new google-services.json for that package
   ios: {
     supportsTablet: true,
     infoPlist: {
@@ -107,6 +109,7 @@ const baseExpoConfig = {
       'FOREGROUND_SERVICE',
       'FOREGROUND_SERVICE_LOCATION',
     ],
+    // Keep this exactly in sync with google-services.json -> client[0].client_info.android_client_info.package_name
     package: 'siet.com',
   },
   notification: {
@@ -136,6 +139,17 @@ const baseExpoConfig = {
     'expo-font',
   ],
   extra: {
+    firebase: {
+      apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
+    },
+    backend: {
+      baseUrl: process.env.EXPO_PUBLIC_NOTIFICATION_SERVER_URL,
+    },
+    cloudinary: {
+      cloudName: process.env.EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME,
+      apiKey: process.env.EXPO_PUBLIC_CLOUDINARY_API_KEY,
+      uploadFolder: process.env.EXPO_PUBLIC_CLOUDINARY_UPLOAD_FOLDER,
+    },
     eas: {
       projectId: '7ccd10d2-9d0a-439a-8816-260ef2b9d6b6',
     },

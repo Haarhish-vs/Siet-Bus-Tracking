@@ -1,31 +1,25 @@
 import { Platform } from 'react-native';
 import * as Crypto from 'expo-crypto';
+import Constants from 'expo-constants';
 
-const getEnv = (primary, fallback) => {
-  if (primary && process.env[primary]) {
-    return process.env[primary];
-  }
-  if (fallback && process.env[fallback]) {
-    return process.env[fallback];
-  }
-  return undefined;
-};
+const extra = Constants.expoConfig?.extra || {};
+const cloudExtra = extra.cloudinary || {};
 
-const CLOUDINARY_CLOUD_NAME = getEnv('EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME', 'CLOUDINARY_CLOUD_NAME');
-const CLOUDINARY_API_KEY = getEnv('EXPO_PUBLIC_CLOUDINARY_API_KEY', 'CLOUDINARY_API_KEY');
-const CLOUDINARY_API_SECRET = getEnv('EXPO_PUBLIC_CLOUDINARY_API_SECRET', 'CLOUDINARY_API_SECRET');
+const CLOUDINARY_CLOUD_NAME = cloudExtra.cloudName || process.env.EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME;
+const CLOUDINARY_API_KEY = cloudExtra.apiKey || process.env.EXPO_PUBLIC_CLOUDINARY_API_KEY;
+// Do not ship API secret in clients; fallback kept for backward compatibility
+const CLOUDINARY_API_SECRET = process.env.EXPO_PUBLIC_CLOUDINARY_API_SECRET;
 export const CLOUDINARY_BASE_FOLDER = (
-  getEnv('EXPO_PUBLIC_CLOUDINARY_UPLOAD_FOLDER', 'CLOUDINARY_UPLOAD_FOLDER') || 'siet-bus/profiles'
+  cloudExtra.uploadFolder || process.env.EXPO_PUBLIC_CLOUDINARY_UPLOAD_FOLDER || 'siet-bus/profiles'
 ).replace(/\/+$/u, '');
 
 const DEFAULT_FOLDER = CLOUDINARY_BASE_FOLDER;
 
 const ensureConfig = () => {
-  if (!CLOUDINARY_CLOUD_NAME || !CLOUDINARY_API_KEY || !CLOUDINARY_API_SECRET) {
+  if (!CLOUDINARY_CLOUD_NAME || !CLOUDINARY_API_KEY) {
     console.error('[Cloudinary] Missing configuration', {
       hasCloudName: Boolean(CLOUDINARY_CLOUD_NAME),
       hasApiKey: Boolean(CLOUDINARY_API_KEY),
-      hasApiSecret: Boolean(CLOUDINARY_API_SECRET),
     });
     throw new Error('Cloudinary environment variables are not configured.');
   }
@@ -102,8 +96,14 @@ export const uploadImageToCloudinary = async (uri, options = {}) => {
     signatureParams.public_id = publicId;
   }
 
-  const signatureBase = buildSignatureString(signatureParams);
-  const signature = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA1, signatureBase);
+  let signature;
+  if (CLOUDINARY_API_SECRET) {
+    const signatureBase = buildSignatureString(signatureParams);
+    signature = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA1, signatureBase);
+  } else {
+    // If no secret is present in client, rely on unsigned preset on Cloudinary side
+    // or expect server-side signature flow. Client will proceed without signature param.
+  }
 
   const uploadUrl = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`;
 
@@ -120,7 +120,9 @@ export const uploadImageToCloudinary = async (uri, options = {}) => {
 
   formData.append('api_key', CLOUDINARY_API_KEY);
   formData.append('timestamp', String(timestamp));
-  formData.append('signature', signature);
+  if (signature) {
+    formData.append('signature', signature);
+  }
 
   if (folder) {
     formData.append('folder', folder);
